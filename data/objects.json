@@ -1,0 +1,57 @@
+{
+  "Objects": [
+    {
+      "Type": "nap::Entity",
+      "mID": "audioEntity",
+      "Components": [
+        {
+          "Type": "nap::audio::OutputComponent",
+          "mID": "output",
+          "Input": "./AudioComponent",
+          "Routing": [
+            0,
+            0
+          ]
+        },
+        {
+          "Type": "nap::audio::AudioComponent",
+          "mID": "AudioComponent",
+          "Object": {
+            "Type": "nap::audio::Oscillator",
+            "mID": "Oscillator",
+            "Frequency": [
+              220.0
+            ],
+            "Amplitude": [
+              0.5
+            ],
+            "FmInput": "",
+            "WaveTables": [
+              "WaveTableResource"
+            ],
+            "WaveTableSelection": 0
+          },
+          "Links": []
+        }
+      ],
+      "Children": []
+    },
+    {
+      "Type": "nap::Scene",
+      "mID": "Scene",
+      "Entities": [
+        {
+          "Entity": "audioEntity",
+          "InstanceProperties": []
+        }
+      ]
+    },
+    {
+      "Type": "nap::audio::WaveTableResource",
+      "mID": "WaveTableResource",
+      "Size": 2048,
+      "Waveform": "Sine",
+      "NumberOfBands": 100
+    }
+  ]
+}
