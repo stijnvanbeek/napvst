@@ -47,12 +47,6 @@ tresult PLUGIN_API NapPlugin::initialize (FUnknown* context)
 	parameters.addParameter (STR16("Bypass"), nullptr, 1, 0, ParameterInfo::kCanAutomate | ParameterInfo::kIsBypass, kBypassId);
 
 	nap::utility::ErrorState error;
-	if (!nap::SDL::videoInitialized())
-	{
-		bool mSDLInitialized = nap::SDL::initVideo(nap::EVideoDriver::Default, error);
-		if (!error.check(mSDLInitialized, "Failed to init video subsystem"))
-			return false;
-	}
 
 	mUpdateThread.start();
 	bool napResult = false;
@@ -67,14 +61,12 @@ tresult PLUGIN_API NapPlugin::initialize (FUnknown* context)
 		mainThreadQueue.process();
 	mainThreadQueue.process(); // Make sure the queue is empty
 
-	// napResult = initializeNAP(error);
 	if (!napResult)
 		return kResultFalse;
 
-	// if (mParameterGroup != nullptr)
-	// 	registerParameters(mParameterGroup->mMembers);
-
 	mUpdateThread.connectPeriodicTask(mUpdateSlot);
+	mEventConverter = std::make_unique<nap::SDLEventConverter>(*mInputService);
+	mTimer = Timer::create(this, 1000.f / 60.f);
 
 	return result;
 }
@@ -82,6 +74,8 @@ tresult PLUGIN_API NapPlugin::initialize (FUnknown* context)
 //------------------------------------------------------------------------
 tresult PLUGIN_API NapPlugin::terminate ()
 {
+	mTimer->stop();
+	mTimer->release();
 	auto plugResult = SingleComponentEffect::terminate ();
 
 	mUpdateThread.enqueue([&]()
@@ -94,6 +88,7 @@ tresult PLUGIN_API NapPlugin::terminate ()
 		mAudioService = nullptr;
 		mMidiService = nullptr;
 		mRenderService = nullptr;
+		mInputService = nullptr;
 		mParameters.clear();
 	}, true);
 
@@ -316,6 +311,45 @@ tresult PLUGIN_API NapPlugin::getParamValueByString (ParamID tag, TChar* string,
 }
 
 
+void NapPlugin::onTimer(Timer *timer)
+{
+	SDL_Event event;
+	while (SDL_PollEvent(&event))
+	{
+		// Check if we are dealing with an input event (mouse / keyboard)
+		if (mEventConverter->isInputEvent(event))
+		{
+			nap::InputEventPtr input_event = mEventConverter->translateInputEvent(event);
+			if (input_event != nullptr)
+			{
+			}
+		}
+
+		// Check if we're dealing with a window event
+		else if (mEventConverter->isWindowEvent(event))
+		{
+			// Quit when request to close
+			if (event.window.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED)
+			{
+			}
+
+			nap::WindowEventPtr window_event = mEventConverter->translateWindowEvent(event);
+			if (window_event != nullptr)
+			{
+				mRenderService->addEvent(std::move(window_event));
+			}
+		}
+
+		// Check if we need to quit the app from running
+		// -1 signals a quit cancellation
+		else if (event.type == SDL_EVENT_QUIT)
+		{
+			// getApp<App>().quit();
+		}
+	}
+}
+
+
 //-----------------------------------------------------------------------------
 tresult PLUGIN_API NapPlugin::queryInterface (const TUID iid, void** obj)
 {
@@ -364,14 +398,11 @@ bool NapPlugin::initializeNAP(nap::TaskQueue& mainThreadQueue, nap::utility::Err
 	mAudioService = mCore->getService<nap::audio::AudioService>();
 	mMidiService = mCore->getService<nap::MidiService>();
 	mRenderService = mCore->getService<nap::RenderService>();
-	mGuiService = mCore->getService<nap::IMGuiService>();
+	mInputService = mCore->getService<nap::SDLInputService>();
 
 	auto parameterGroup = mCore->getResourceManager()->findObject<nap::ParameterGroup>("Parameters").get();
 	if (parameterGroup != nullptr)
 		registerParameters(parameterGroup->mMembers);
-
-	// Find the parameter GUI
-	mParameterGUI = mCore->getResourceManager()->findObject<nap::ParameterGUI>("ParameterGUI").get();
 
 	mRenderWindow = std::make_unique<nap::RenderWindow>(*mCore);
 	mRenderWindow->mClearColor = { 1.0f, 0.f, 0.f, 1.f };
@@ -429,12 +460,12 @@ void NapPlugin::update(double deltaTime)
 {
 	std::function<void(double)> drawFunc = [&](double deltaTime)
 	{
-		ImGui::Begin("NAP", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
-		if (mParameterGUI != nullptr)
-			mParameterGUI->show(false);
-		ImGui::NewLine();
-		ImGui::Text(nap::utility::stringFormat("Framerate: %.02f", mCore->getFramerate()).c_str());
-		ImGui::End();
+		// ImGui::Begin("NAP", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+		// if (mParameterGUI != nullptr)
+		// 	mParameterGUI->show(false);
+		// ImGui::NewLine();
+		// ImGui::Text(nap::utility::stringFormat("Framerate: %.02f", mCore->getFramerate()).c_str());
+		// ImGui::End();
 	};
 	mCore->update(drawFunc);
 
@@ -447,7 +478,7 @@ void NapPlugin::update(double deltaTime)
 		mRenderWindow->beginRendering();
 
 		// Render GUI elements
-		mGuiService->draw();
+		// mGuiService->draw();
 
 		// Stop render pass
 		mRenderWindow->endRendering();

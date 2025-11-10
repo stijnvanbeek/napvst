@@ -12,12 +12,12 @@
 #include <midiservice.h>
 #include <nap/core.h>
 #include <renderservice.h>
-#include <IMGuiService.h>
+#include <sdlinputservice.h>
 #include <parameter.h>
 #include <renderwindow.h>
-#include <parametergui.h>
 
-#include "imguiservice.h"
+#include "sdleventconverter.h"
+#include "base/source/timer.h"
 
 
 namespace Steinberg {
@@ -26,7 +26,7 @@ namespace Vst {
 template <typename T>
 class AGainUIMessageController;
 
-class NapPlugin : public SingleComponentEffect
+class NapPlugin : public SingleComponentEffect, ITimerCallback
 {
 public:
 	//------------------------------------------------------------------------
@@ -57,6 +57,7 @@ public:
 	                                          String128 string) SMTG_OVERRIDE;
 	tresult PLUGIN_API getParamValueByString (ParamID tag, TChar* string,
 	                                          ParamValue& valueNormalized) SMTG_OVERRIDE;
+	void onTimer(Timer* timer) SMTG_OVERRIDE;
 
 	//---Interface---------
 	OBJ_METHODS (NapPlugin, SingleComponentEffect)
@@ -76,12 +77,13 @@ private:
 	nap::audio::AudioService* mAudioService = nullptr;
 	nap::MidiService* mMidiService = nullptr;
 	nap::RenderService* mRenderService = nullptr;
-	nap::IMGuiService* mGuiService = nullptr;
+	nap::SDLInputService* mInputService = nullptr;
 	std::vector<nap::Parameter*> mParameters;
-	nap::ParameterGUI* mParameterGUI = nullptr;
 	nap::ControlThread mUpdateThread;
 
 	std::unique_ptr<nap::RenderWindow> mRenderWindow = nullptr;
+	Timer* mTimer = nullptr;
+	std::unique_ptr<nap::SDLEventConverter> mEventConverter = nullptr;
 
 	nap::Slot<double> mUpdateSlot = { this, &NapPlugin::update };
 	void update(double deltaTime);
