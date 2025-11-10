@@ -79,15 +79,14 @@ private:
 	nap::RenderService* mRenderService = nullptr;
 	nap::SDLInputService* mInputService = nullptr;
 	std::vector<nap::Parameter*> mParameters;
-	nap::ControlThread mUpdateThread;
+	nap::ControlThread mControlThread;
+	nap::TaskQueue mMainThreadQueue;
 
 	std::unique_ptr<nap::RenderWindow> mRenderWindow = nullptr;
 	Timer* mTimer = nullptr;
 	std::unique_ptr<nap::SDLEventConverter> mEventConverter = nullptr;
 
-	nap::Slot<double> mUpdateSlot = { this, &NapPlugin::update };
-	void update(double deltaTime);
-	std::function<void(double)> mUpdateFunction = [](double){};
+	void update();
 };
 
 //------------------------------------------------------------------------

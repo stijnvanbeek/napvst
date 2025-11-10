@@ -48,23 +48,21 @@ tresult PLUGIN_API NapPlugin::initialize (FUnknown* context)
 
 	nap::utility::ErrorState error;
 
-	mUpdateThread.start();
+	mControlThread.start();
 	bool napResult = false;
 	std::atomic<bool> napInitialized(false);
-	nap::TaskQueue mainThreadQueue;
-	mUpdateThread.enqueue([&]()
+	mControlThread.enqueue([&]()
 	{
-		napResult = initializeNAP(mainThreadQueue, error);
+		napResult = initializeNAP(mMainThreadQueue, error);
 		napInitialized = true;
 	});
 	while (!napInitialized)
-		mainThreadQueue.process();
-	mainThreadQueue.process(); // Make sure the queue is empty
+		mMainThreadQueue.process();
+	mMainThreadQueue.process(); // Make sure the queue is empty
 
 	if (!napResult)
 		return kResultFalse;
 
-	mUpdateThread.connectPeriodicTask(mUpdateSlot);
 	mEventConverter = std::make_unique<nap::SDLEventConverter>(*mInputService);
 	mTimer = Timer::create(this, 1000.f / 60.f);
 
@@ -78,9 +76,8 @@ tresult PLUGIN_API NapPlugin::terminate ()
 	mTimer->release();
 	auto plugResult = SingleComponentEffect::terminate ();
 
-	mUpdateThread.enqueue([&]()
+	mControlThread.enqueue([&]()
 	{
-		mUpdateThread.disconnectPeriodicTask(mUpdateSlot);
 		mRenderWindow->onDestroy();
 		mRenderWindow = nullptr;
 		mServices = nullptr;
@@ -92,7 +89,7 @@ tresult PLUGIN_API NapPlugin::terminate ()
 		mParameters.clear();
 	}, true);
 
-	mUpdateThread.stop();
+	mControlThread.stop();
 
 	return plugResult;
 }
@@ -141,17 +138,17 @@ tresult PLUGIN_API NapPlugin::process (ProcessData& data)
 						{
 							auto floatParam = rtti_cast<nap::ParameterFloat>(parameter);
 							if (floatParam != nullptr)
-								mUpdateThread.enqueue([floatParam, value](){
+								mControlThread.enqueue([floatParam, value](){
 									floatParam->setValue(nap::math::fit<float>(value, 0.f, 1.f, floatParam->mMinimum, floatParam->mMaximum));
 								});
 							auto intParam = rtti_cast<nap::ParameterInt>(parameter);
 							if (intParam != nullptr)
-								mUpdateThread.enqueue([intParam, value](){
+								mControlThread.enqueue([intParam, value](){
 									intParam->setValue(nap::math::fit<float>(value, 0.f, 1.f, intParam->mMinimum, intParam->mMaximum));
 								});
 							auto optionParam = rtti_cast<nap::ParameterDropDown>(parameter);
 							if (optionParam != nullptr)
-								mUpdateThread.enqueue([optionParam, value](){
+								mControlThread.enqueue([optionParam, value](){
 									optionParam->setSelectedIndex(nap::math::fit<float>(value, 0.f, 1.f, 0, optionParam->mItems.size() - 1));
 								});
 						}
@@ -313,40 +310,8 @@ tresult PLUGIN_API NapPlugin::getParamValueByString (ParamID tag, TChar* string,
 
 void NapPlugin::onTimer(Timer *timer)
 {
-	SDL_Event event;
-	while (SDL_PollEvent(&event))
-	{
-		// Check if we are dealing with an input event (mouse / keyboard)
-		if (mEventConverter->isInputEvent(event))
-		{
-			nap::InputEventPtr input_event = mEventConverter->translateInputEvent(event);
-			if (input_event != nullptr)
-			{
-			}
-		}
 
-		// Check if we're dealing with a window event
-		else if (mEventConverter->isWindowEvent(event))
-		{
-			// Quit when request to close
-			if (event.window.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED)
-			{
-			}
-
-			nap::WindowEventPtr window_event = mEventConverter->translateWindowEvent(event);
-			if (window_event != nullptr)
-			{
-				mRenderService->addEvent(std::move(window_event));
-			}
-		}
-
-		// Check if we need to quit the app from running
-		// -1 signals a quit cancellation
-		else if (event.type == SDL_EVENT_QUIT)
-		{
-			// getApp<App>().quit();
-		}
-	}
+	mControlThread.enqueue([&](){ update(); }, true);
 }
 
 
@@ -456,7 +421,7 @@ void NapPlugin::registerParameters(const std::vector<nap::rtti::ObjectPtr<nap::P
 }
 
 
-void NapPlugin::update(double deltaTime)
+void NapPlugin::update()
 {
 	std::function<void(double)> drawFunc = [&](double deltaTime)
 	{
