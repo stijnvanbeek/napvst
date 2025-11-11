@@ -20,9 +20,13 @@ smtg_add_vst3plugin(VstTest
         src/version.h
         src/napplugin.h
         src/napplugin.cpp
+        src/sdlpoller.h
+        src/sdlpoller.cpp
+        src/nappluginview.h
+        src/nappluginview.cpp
 )
 
-target_link_libraries(VstTest PRIVATE sdk naprtti napaudioadvanced napscene napmidi napcontrol napparameter napfmsynth naprender napsdlinput)
+target_link_libraries(VstTest PRIVATE sdk naprtti napaudioadvanced napscene napmidi napcontrol napparameter napfmsynth naprender napparametergui)
 codesign_target(VstTest)
 
 smtg_target_configure_version_file(VstTest)

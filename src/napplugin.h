@@ -3,7 +3,6 @@
 
 // must always come first
 #include "public.sdk/source/vst/vstsinglecomponenteffect.h"
-//------------------------------------------------------------------------
 
 #include "pluginterfaces/vst/ivstcontextmenu.h"
 
@@ -13,9 +12,13 @@
 #include <nap/core.h>
 #include <renderservice.h>
 #include <sdlinputservice.h>
+#include <imguiservice.h>
 #include <parameter.h>
+#include <parametergui.h>
 #include <renderwindow.h>
 
+#include "sdlpoller.h"
+#include "nappluginview.h"
 #include "sdleventconverter.h"
 #include "base/source/timer.h"
 
@@ -77,16 +80,24 @@ private:
 	nap::audio::AudioService* mAudioService = nullptr;
 	nap::MidiService* mMidiService = nullptr;
 	nap::RenderService* mRenderService = nullptr;
-	nap::SDLInputService* mInputService = nullptr;
+	nap::InputService* mInputService = nullptr;
+	nap::SDLInputService* mSDLInputService = nullptr;
+	nap::IMGuiService* mGuiService = nullptr;
 	std::vector<nap::Parameter*> mParameters;
 	nap::ControlThread mControlThread;
 	nap::TaskQueue mMainThreadQueue;
 
 	std::unique_ptr<nap::RenderWindow> mRenderWindow = nullptr;
+	std::unique_ptr<nap::ParameterGUI> mParameterGUI = nullptr;
 	Timer* mTimer = nullptr;
 	std::unique_ptr<nap::SDLEventConverter> mEventConverter = nullptr;
 
-	void update();
+	nap::Slot<double> mControlSlot = { this, &NapPlugin::control };
+	void control(double deltaTime);
+	std::mutex mMutex; // Main mutex guarding control and main thread
+
+	nap::SDLPoller::Client mSDLPollerClient;
+	std::unique_ptr<NapPluginView> mView = nullptr;
 };
 
 //------------------------------------------------------------------------
