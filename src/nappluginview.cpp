@@ -7,6 +7,4 @@
 namespace Steinberg
 {
 
-	uint32 NapPluginView::mRefCounter = 0;
-
 } // nap

@@ -62,7 +62,6 @@ namespace Steinberg
 			if (!napResult)
 				return kResultFalse;
 
-			mView = std::make_unique<NapPluginView>(*mRenderWindow);
 			mEventConverter = std::make_unique<nap::SDLEventConverter>(*mSDLInputService);
 			mTimer = Timer::create(this, 1000.f / 60.f);
 
@@ -123,7 +122,6 @@ namespace Steinberg
 				registerParameters(parameterGroup->mMembers);
 
 			mRenderWindow = std::make_unique<nap::RenderWindow>(*mCore);
-			mRenderWindow->mClearColor = { 1.0f, 0.f, 0.f, 1.f };
 			if (!mRenderWindow->init(errorState))
 				return false;
 
@@ -132,17 +130,25 @@ namespace Steinberg
 			if (!mParameterGUI->init(errorState))
 				return false;
 
+			mInitialized = true;
+
 			return true;
 		}
 
 
 		tresult PLUGIN_API NapPlugin::terminate ()
 		{
-			mControlThread.disconnectPeriodicTask(mControlSlot);
+			if (!mInitialized)
+				return kResultOk;
+			mInitialized = false;
+
 			mTimer->stop();
 			mTimer->release();
-			auto plugResult = SingleComponentEffect::terminate ();
 
+			mControlThread.disconnectPeriodicTask(mControlSlot);
+			nap::Logger::info("disconnected periodic task");
+
+			std::atomic<bool> napTerminated(false);
 			mControlThread.enqueue([&]()
 			{
 				mRenderWindow->onDestroy();
@@ -151,16 +157,15 @@ namespace Steinberg
 				mParameterGUI = nullptr;
 				mServices = nullptr;
 				mCore = nullptr;
-				mAudioService = nullptr;
-				mMidiService = nullptr;
-				mRenderService = nullptr;
-				mInputService = nullptr;
-				mGuiService = nullptr;
-				mParameters.clear();
-			}, true);
+				napTerminated = true;
+			});
+			while (!napTerminated)
+				mMainThreadQueue.process();
+			mMainThreadQueue.process();
 
 			mControlThread.stop();
 
+			auto plugResult = SingleComponentEffect::terminate ();
 			return plugResult;
 		}
 
@@ -436,7 +441,9 @@ namespace Steinberg
 		IPlugView* PLUGIN_API NapPlugin::createView (const char* name)
 		{
 			mControlThread.enqueue([&](){ mRenderWindow->show(); });
-			return mView.get();
+			auto rect = ViewRect(0, 0, 200.f, 200.f);
+			auto view = new NapPluginView(&rect);
+			return view;
 		}
 
 

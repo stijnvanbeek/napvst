@@ -35,6 +35,7 @@ public:
 	//------------------------------------------------------------------------
 
 	NapPlugin ();
+	~NapPlugin() override { terminate(); }
 
 	static FUnknown* createInstance (void* /*context*/) { return (IAudioProcessor*)new NapPlugin; }
 
@@ -97,7 +98,8 @@ private:
 	std::mutex mMutex; // Main mutex guarding control and main thread
 
 	nap::SDLPoller::Client mSDLPollerClient;
-	std::unique_ptr<NapPluginView> mView = nullptr;
+	bool mInitialized = false;
+	// NapPluginView* mView = nullptr;
 };
 
 //------------------------------------------------------------------------
