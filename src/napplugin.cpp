@@ -23,8 +23,6 @@ namespace Steinberg
 
 	namespace Vst
 	{
-
-
 		NapPlugin::NapPlugin ()
 		{
 		}
@@ -121,10 +119,6 @@ namespace Steinberg
 			if (parameterGroup != nullptr)
 				registerParameters(parameterGroup->mMembers);
 
-			mRenderWindow = std::make_unique<nap::RenderWindow>(*mCore);
-			if (!mRenderWindow->init(errorState))
-				return false;
-
 			mParameterGUI = std::make_unique<nap::ParameterGUI>(*mCore);
 			mParameterGUI->mParameterGroup = parameterGroup;
 			if (!mParameterGUI->init(errorState))
@@ -151,8 +145,6 @@ namespace Steinberg
 			std::atomic<bool> napTerminated(false);
 			mControlThread.enqueue([&]()
 			{
-				mRenderWindow->onDestroy();
-				mRenderWindow = nullptr;
 				mParameterGUI->onDestroy();
 				mParameterGUI = nullptr;
 				mServices = nullptr;
@@ -172,6 +164,9 @@ namespace Steinberg
 
 		void NapPlugin::onTimer(Timer *timer)
 		{
+			if (mView == nullptr || !mView->isAttached())
+				return;
+
 			SDL_Event event;
 			while (mSDLPollerClient.poll(&event))
 			{
@@ -223,7 +218,7 @@ namespace Steinberg
 					if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED)
 					{
 						std::lock_guard<std::mutex> lock(mMutex);
-						mControlThread.enqueue([&](){ mRenderWindow->hide(); });
+						// mControlThread.enqueue([&](){ mRenderWindow->hide(); });
 					}
 
 					nap::WindowEventPtr window_event = mEventConverter->translateWindowEvent(event);
@@ -238,39 +233,42 @@ namespace Steinberg
 
 		void NapPlugin::control(double deltaTime)
 		{
-			std::lock_guard<std::mutex> lock(mMutex);
-
-			std::function<void(double)> drawFunc = [&](double deltaTime)
-			{
-				ImGui::Begin("NAP", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
-				if (mParameterGUI != nullptr)
-					mParameterGUI->show(false);
-				ImGui::NewLine();
-				ImGui::Text(nap::utility::stringFormat("Framerate: %.02f", mCore->getFramerate()).c_str());
-				ImGui::End();
-			};
-			mCore->update(drawFunc);
-
-			mRenderService->beginFrame();
-
 			// Begin recording the render commands for the main render window
-			if (mRenderService->beginRecording(*mRenderWindow))
+			if (mView != nullptr && mView->isAttached())
 			{
-				// Begin render pass
-				mRenderWindow->beginRendering();
+				std::lock_guard<std::mutex> lock(mMutex);
 
-				// Render GUI elements
-				mGuiService->draw();
+				std::function<void(double)> drawFunc = [&](double deltaTime)
+				{
+					ImGui::Begin("NAP", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+					if (mParameterGUI != nullptr)
+						mParameterGUI->show(false);
+					ImGui::NewLine();
+					ImGui::Text(nap::utility::stringFormat("Framerate: %.02f", mCore->getFramerate()).c_str());
+					ImGui::End();
+				};
+				mCore->update(drawFunc);
 
-				// Stop render pass
-				mRenderWindow->endRendering();
+				mRenderService->beginFrame();
 
-				// End recording
-				mRenderService->endRecording();
+				if (mRenderService->beginRecording(*mView->getRenderWindow()))
+				{
+					// Begin render pass
+					mView->getRenderWindow()->beginRendering();
+
+					// Render GUI elements
+					mGuiService->draw();
+
+					// Stop render pass
+					mView->getRenderWindow()->endRendering();
+
+					// End recording
+					mRenderService->endRecording();
+				}
+
+				// Proceed to next frame
+				mRenderService->endFrame();
 			}
-
-			// Proceed to next frame
-			mRenderService->endFrame();
 		}
 
 
@@ -440,10 +438,13 @@ namespace Steinberg
 
 		IPlugView* PLUGIN_API NapPlugin::createView (const char* name)
 		{
-			mControlThread.enqueue([&](){ mRenderWindow->show(); });
-			auto rect = ViewRect(0, 0, 200.f, 200.f);
-			auto view = new NapPluginView(&rect);
-			return view;
+			// mControlThread.enqueue([&](){ mRenderWindow->show(); });
+			if (mView != nullptr)
+				return mView;
+
+			ViewRect rect = ViewRect(0, 0, 400, 300);
+			mView = new NapPluginView(*this, rect);
+			return mView;
 		}
 
 

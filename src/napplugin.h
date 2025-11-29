@@ -68,6 +68,11 @@ public:
 	tresult PLUGIN_API queryInterface (const TUID iid, void** obj) SMTG_OVERRIDE;
 	REFCOUNT_METHODS (SingleComponentEffect)
 
+	// NAP
+	nap::Core& getCore() { return *mCore; }
+	nap::ControlThread& getControlThread() { return mControlThread; }
+	std::mutex& getMutex() { return mMutex; }
+
 private:
 	bool initializeNAP(nap::TaskQueue& mainThreadQueue, nap::utility::ErrorState& errorState);
 	void registerParameters(const std::vector<nap::rtti::ObjectPtr<nap::Parameter>>& napParameters);
@@ -88,7 +93,6 @@ private:
 	nap::ControlThread mControlThread;
 	nap::TaskQueue mMainThreadQueue;
 
-	std::unique_ptr<nap::RenderWindow> mRenderWindow = nullptr;
 	std::unique_ptr<nap::ParameterGUI> mParameterGUI = nullptr;
 	Timer* mTimer = nullptr;
 	std::unique_ptr<nap::SDLEventConverter> mEventConverter = nullptr;
@@ -99,7 +103,7 @@ private:
 
 	nap::SDLPoller::Client mSDLPollerClient;
 	bool mInitialized = false;
-	// NapPluginView* mView = nullptr;
+	NapPluginView* mView = nullptr;
 };
 
 //------------------------------------------------------------------------
