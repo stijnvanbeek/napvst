@@ -73,6 +73,13 @@ public:
 	nap::ControlThread& getControlThread() { return mControlThread; }
 	std::mutex& getMutex() { return mMutex; }
 
+	void viewClosed() { mView = nullptr; }
+
+	// Input bridging (VSTGUI -> NAP)
+	void processNAPInputEvent(const nap::InputEvent& ev);
+	void setUseVSTGUIInput(bool enable) { mUseVSTGUIInput = enable; }
+	bool isUsingVSTGUIInput() const { return mUseVSTGUIInput; }
+
 private:
 	bool initializeNAP(nap::TaskQueue& mainThreadQueue, nap::utility::ErrorState& errorState);
 	void registerParameters(const std::vector<nap::rtti::ObjectPtr<nap::Parameter>>& napParameters);
@@ -96,6 +103,8 @@ private:
 	std::unique_ptr<nap::ParameterGUI> mParameterGUI = nullptr;
 	Timer* mTimer = nullptr;
 	std::unique_ptr<nap::SDLEventConverter> mEventConverter = nullptr;
+
+	bool mUseVSTGUIInput = false;
 
 	nap::Slot<double> mControlSlot = { this, &NapPlugin::control };
 	void control(double deltaTime);

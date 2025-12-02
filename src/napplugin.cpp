@@ -1,9 +1,12 @@
 #include "napplugin.h"
-#include "version.h" // for versioning
+#include "version.h"
 
 #include "public.sdk/source/main/pluginfactory.h"
 #include "public.sdk/source/vst/vstaudioprocessoralgo.h"
 #include "public.sdk/source/vst/utility/stringconvert.h"
+
+#include "vstgui/lib/vstguiinit.h"
+#include "public.sdk/source/main/moduleinit.h"
 
 #include "pluginterfaces/base/funknownimpl.h"
 #include "base/source/fstreamer.h"
@@ -17,12 +20,16 @@
 #include <cstdio>
 #include <functional>
 
+using Steinberg::ModuleInitializer;
+using Steinberg::ModuleTerminator;
+using Steinberg::getPlatformModuleHandle;
 
 namespace Steinberg
 {
 
 	namespace Vst
 	{
+
 		NapPlugin::NapPlugin ()
 		{
 		}
@@ -162,83 +169,27 @@ namespace Steinberg
 		}
 
 
-		void NapPlugin::onTimer(Timer *timer)
-		{
-			if (mView == nullptr || !mView->isAttached())
-				return;
+ 		void NapPlugin::processNAPInputEvent(const nap::InputEvent& ev)
+ 		{
+ 			std::lock_guard<std::mutex> lock(mMutex);
+ 			mGuiService->processInputEvent(ev);
+ 		}
 
-			SDL_Event event;
-			while (mSDLPollerClient.poll(&event))
-			{
-				// Forward if we're not capturing the mouse in the GUI and it's a pointer event
-				if (mEventConverter->isMouseEvent(event))
-				{
-					nap::InputEventPtr input_event = mEventConverter->translateMouseEvent(event);
-					if (input_event == nullptr)
-						continue;
 
-					{
-						std::lock_guard<std::mutex> lock(mMutex);
-						ImGuiContext* ctx = mGuiService->processInputEvent(*input_event);
-						if (ctx != nullptr && !mGuiService->isCapturingMouse(ctx))
-						{
-						}
-					}
-				}
-
-				// Forward if we're not capturing the keyboard in the GUI and it's a key event
-				else if (mEventConverter->isKeyEvent(event))
-				{
-					nap::InputEventPtr input_event = mEventConverter->translateKeyEvent(event);
-					if (input_event == nullptr)
-						continue;
-
-					{
-						std::lock_guard<std::mutex> lock(mMutex);
-						ImGuiContext* ctx = mGuiService->processInputEvent(*input_event);
-						if (ctx != nullptr && !mGuiService->isCapturingKeyboard(ctx))
-						{
-						}
-					}
-				}
-
-				// Always forward controller events
-				else if (mEventConverter->isControllerEvent(event))
-				{
-					nap::InputEventPtr input_event = mEventConverter->translateControllerEvent(event);
-					if (input_event != nullptr)
-					{
-					}
-				}
-
-				// Always forward window events
-				else if (mEventConverter->isWindowEvent(event))
-				{
-					// Quit when request to close
-					if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED)
-					{
-						std::lock_guard<std::mutex> lock(mMutex);
-						// mControlThread.enqueue([&](){ mRenderWindow->hide(); });
-					}
-
-					nap::WindowEventPtr window_event = mEventConverter->translateWindowEvent(event);
-					if (window_event != nullptr)
-					{
-					}
-				}
-			}
+ 		void NapPlugin::onTimer(Timer *timer)
+ 		{
 			mMainThreadQueue.process();
-		}
+ 		}
 
 
 		void NapPlugin::control(double deltaTime)
 		{
 			// Begin recording the render commands for the main render window
-			if (mView != nullptr && mView->isAttached())
-			{
-				std::lock_guard<std::mutex> lock(mMutex);
+			std::lock_guard<std::mutex> lock(mMutex);
 
-				std::function<void(double)> drawFunc = [&](double deltaTime)
+			std::function<void(double)> drawFunc;
+			if (mView != nullptr && mView->isAttached())
+				drawFunc = [&](double deltaTime)
 				{
 					ImGui::Begin("NAP", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
 					if (mParameterGUI != nullptr)
@@ -247,28 +198,23 @@ namespace Steinberg
 					ImGui::Text(nap::utility::stringFormat("Framerate: %.02f", mCore->getFramerate()).c_str());
 					ImGui::End();
 				};
-				mCore->update(drawFunc);
+			else
+				drawFunc = [](double deltaTime) {};
 
-				mRenderService->beginFrame();
+			mCore->update(drawFunc);
 
+			mRenderService->beginFrame();
+			if (mView != nullptr && mView->isAttached())
+			{
 				if (mRenderService->beginRecording(*mView->getRenderWindow()))
 				{
-					// Begin render pass
 					mView->getRenderWindow()->beginRendering();
-
-					// Render GUI elements
 					mGuiService->draw();
-
-					// Stop render pass
 					mView->getRenderWindow()->endRendering();
-
-					// End recording
 					mRenderService->endRecording();
 				}
-
-				// Proceed to next frame
-				mRenderService->endFrame();
 			}
+			mRenderService->endFrame();
 		}
 
 
@@ -438,12 +384,11 @@ namespace Steinberg
 
 		IPlugView* PLUGIN_API NapPlugin::createView (const char* name)
 		{
-			// mControlThread.enqueue([&](){ mRenderWindow->show(); });
 			if (mView != nullptr)
-				return mView;
+				return nullptr;
 
 			ViewRect rect = ViewRect(0, 0, 400, 300);
-			mView = new NapPluginView(*this, rect);
+			mView = new NapPluginView(*this, mMainThreadQueue, rect);
 			return mView;
 		}
 
@@ -460,7 +405,7 @@ namespace Steinberg
 		}
 
 
-		tresult PLUGIN_API NapPlugin::setParamNormalized (ParamID tag, ParamValue value)
+		tresult PLUGIN_API NapPlugin::setParamNormalized(ParamID tag, ParamValue value)
 		{
 			// called from host to update our parameters state
 			tresult result = SingleComponentEffect::setParamNormalized (tag, value);
@@ -468,23 +413,21 @@ namespace Steinberg
 		}
 
 
-		tresult PLUGIN_API NapPlugin::getParamStringByValue (ParamID tag, ParamValue valueNormalized,
-		                                                       String128 string)
+		tresult PLUGIN_API NapPlugin::getParamStringByValue(ParamID tag, ParamValue valueNormalized, String128 string)
 		{
-			return SingleComponentEffect::getParamStringByValue (tag, valueNormalized, string);
+			return SingleComponentEffect::getParamStringByValue(tag, valueNormalized, string);
 		}
 
 
-		tresult PLUGIN_API NapPlugin::getParamValueByString (ParamID tag, TChar* string,
-		                                                       ParamValue& valueNormalized)
+		tresult PLUGIN_API NapPlugin::getParamValueByString(ParamID tag, TChar* string, ParamValue& valueNormalized)
 		{
-			return SingleComponentEffect::getParamValueByString (tag, string, valueNormalized);
+			return SingleComponentEffect::getParamValueByString(tag, string, valueNormalized);
 		}
 
 
-		tresult PLUGIN_API NapPlugin::queryInterface (const TUID iid, void** obj)
+		tresult PLUGIN_API NapPlugin::queryInterface(const TUID iid, void** obj)
 		{
-			return SingleComponentEffect::queryInterface (iid, obj);
+			return SingleComponentEffect::queryInterface(iid, obj);
 		}
 
 
@@ -537,7 +480,6 @@ namespace Steinberg
 
 
 BEGIN_FACTORY_DEF (stringCompanyName, stringCompanyWeb, stringCompanyEmail)
-
 	//---First plug-in included in this factory-------
 	// its kVstAudioEffectClass component
 	DEF_CLASS2 (INLINE_UID (0xBD58B550, 0xF9E5634E, 0x9D2EFF39, 0xEA0927B3),
@@ -550,3 +492,6 @@ BEGIN_FACTORY_DEF (stringCompanyName, stringCompanyWeb, stringCompanyEmail)
 				kVstVersionString,							// the VST 3 SDK version (do not change this, always use this define)
 				Steinberg::Vst::NapPlugin::createInstance)// function pointer called when this component should be instantiated
 END_FACTORY
+
+static ModuleInitializer gVSTGUIInit([]{ VSTGUI::init(getPlatformModuleHandle()); });
+static ModuleTerminator gVSTGUITerm([]{ VSTGUI::exit(); });

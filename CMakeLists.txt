@@ -26,12 +26,13 @@ smtg_add_vst3plugin(VstTest
         src/nappluginview.cpp
 )
 
-target_link_libraries(VstTest PRIVATE sdk naprtti napaudioadvanced napscene napmidi napcontrol napparameter napfmsynth naprender napparametergui)
-codesign_target(VstTest)
+target_link_libraries(VstTest PRIVATE sdk vstgui_support naprtti napaudioadvanced napscene napmidi napcontrol napparameter napfmsynth naprender napparametergui)
 
+codesign_target(VstTest)
 smtg_target_configure_version_file(VstTest)
 
 if(SMTG_MAC)
+    set_source_files_properties(src/nappluginview.cpp PROPERTIES LANGUAGE OBJCXX)
     smtg_target_set_bundle(VstTest
             BUNDLE_IDENTIFIER org.stijnvanbeek.VstTest
             COMPANY_NAME StijnVanBeek
