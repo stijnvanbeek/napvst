@@ -195,7 +195,8 @@ namespace Steinberg
 					if (mParameterGUI != nullptr)
 						mParameterGUI->show(false);
 					ImGui::NewLine();
-					ImGui::Text(nap::utility::stringFormat("Framerate: %.02f", mCore->getFramerate()).c_str());
+					std::string formattedText = nap::utility::stringFormat("Framerate: %.02f", mCore->getFramerate());
+					ImGui::Text(formattedText.c_str());
 					ImGui::End();
 				};
 			else
