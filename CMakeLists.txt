@@ -46,7 +46,8 @@ if (TARGET nap${PROJECT_NAME})
 endif()
 
 if (BUILD_STATIC)
-    target_link_libraries(${PROJECT_NAME} PRIVATE sdk vstgui_support napstatic)
+    target_link_nap_static(${PROJECT_NAME})
+    target_link_libraries(${PROJECT_NAME} PRIVATE sdk vstgui_support)
 else ()
     target_link_libraries(${PROJECT_NAME} PRIVATE sdk vstgui_support napimgui napparametergui napfmsynth napcontrol)
 endif ()
@@ -114,13 +115,6 @@ add_custom_command(
         ${BIN_DIR}/${PROJECT_NAME}.json)
 
 set(source_data_dir ${CMAKE_CURRENT_SOURCE_DIR}/data)
-
-# Run FBX converter post-build within bin data dir
-add_dependencies(${PROJECT_NAME} fbxconverter)
-add_custom_command(TARGET ${PROJECT_NAME}
-        POST_BUILD
-        COMMAND ${BIN_DIR}/fbxconverter -o ${source_data_dir} ${source_data_dir}/*.fbx
-        COMMENT "Exporting FBX in '${source_data_dir}'")
 
 # Copy data directory to app specific bin
 set(bin_data_dir ${app_install_data_dir}/data)
