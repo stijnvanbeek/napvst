@@ -17,11 +17,6 @@ add_subdirectory(${NAP_ROOT} ${PROJECT_BINARY_DIR}/nap)
 add_subdirectory(${VST3SDK_SOURCE_DIR} ${PROJECT_BINARY_DIR}/vst3sdk)
 include(${NAP_ROOT}/cmake/nap_utilities.cmake)
 
-#set(CMAKE_SKIP_BUILD_RPATH  TRUE)
-#set(MACOSX_RPATH TRUE)
-#set(CMAKE_INSTALL_RPATH "@loader_path/lib")
-#set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-
 # Scan for an app module
 try_add_module_from_dir(${CMAKE_CURRENT_SOURCE_DIR}/module)
 
@@ -54,65 +49,7 @@ endif ()
 
 smtg_target_configure_version_file(${PROJECT_NAME})
 
-# Create the cache directory in source
-set(cache_dir ${CMAKE_CURRENT_SOURCE_DIR}/cache)
-file(MAKE_DIRECTORY ${cache_dir})
-
-# Read app.json from file
-set(app_json_path ${CMAKE_CURRENT_SOURCE_DIR}/app.json)
-file(READ ${app_json_path} app_json)
-
-# Check if path mapping is set in app.json
-string(JSON path_mapping_path GET ${app_json} PathMapping)
-set(path_mapping_abs_path ${CMAKE_CURRENT_SOURCE_DIR}/${path_mapping_path})
-if ("${path_mapping_path}" STREQUAL "")
-    message(FATAL_ERROR "No path mapping found for App target ${PROJECT_NAME}. Set the path mapping in App.json")
-endif()
-
-# Check if pathmapping file from app.json exists, otherwise copy from default
-if((NOT EXISTS ${path_mapping_abs_path}))
-    file(COPY_FILE ${NAP_ROOT}/cmake/default_path_mapping.json ${path_mapping_abs_path})
-endif()
-
-# Set the path mapping variable in patched app.json to copy of path mapping in project root.
-cmake_path(GET path_mapping_path FILENAME path_mapping_filename)
-string(JSON install_app_json SET ${app_json} "PathMapping" \"${path_mapping_filename}\")
-
-# Copy path mapping to app specific install data directory in bin
 set(app_install_data_dir ${BIN_DIR}/app_install_data/${PROJECT_NAME})
-file(MAKE_DIRECTORY ${app_install_data_dir})
-add_custom_command(
-        TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        ${path_mapping_abs_path} ${app_install_data_dir}/${path_mapping_filename})
-
-# Write app json patched for installation to cache directory
-file(WRITE ${cache_dir}/install_app_json.json ${install_app_json})
-# Write app json patched for installation to app install directory in bin
-add_custom_command(
-        TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        ${cache_dir}/install_app_json.json
-        ${app_install_data_dir}/app.json)
-
-# Create another patched version of App.json in the cache that is patched to function in the bin directory build
-string(JSON data_file_path GET ${app_json} Data)
-set(absolute_data_file_path ${CMAKE_CURRENT_SOURCE_DIR}/${data_file_path})
-string(JSON build_app_json SET ${app_json} "Data" \"${absolute_data_file_path}\")
-string(JSON build_app_json SET ${build_app_json} "PathMapping" \"app_install_data/${PROJECT_NAME}/${path_mapping_filename}\")
-if (NOT "${config_path}" STREQUAL "")
-    string(JSON build_app_json SET ${build_app_json} "ServiceConfig" \"app_install_data/${PROJECT_NAME}/${config_filename}\")
-else()
-    string(JSON build_app_json SET ${build_app_json} "ServiceConfig" \"\")
-endif()
-file(WRITE ${cache_dir}/build_app.json ${build_app_json})
-
-# Copy the patched App.json from cache to bin for running apps from source
-add_custom_command(
-        TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        ${cache_dir}/build_app.json
-        ${BIN_DIR}/${PROJECT_NAME}.json)
 
 set(source_data_dir ${CMAKE_CURRENT_SOURCE_DIR}/data)
 
@@ -149,19 +86,7 @@ else()
     endif()
 endif()
 
-# Copy core license files
-set(bin_license_dir ${BIN_DIR}/license)
-add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${NAP_ROOT}/docs/license
-        ${bin_license_dir}/NAP)
-add_license(moodycamel ${NAP_ROOT}/thirdparty/moodycamel/LICENSE.md)
-add_license(rapidjson ${NAP_ROOT}/thirdparty/rapidjson/license.txt)
-add_license(rttr ${NAP_ROOT}/thirdparty/rttr/source/LICENSE.txt)
-add_license(tclap ${NAP_ROOT}/thirdparty/tclap/COPYING)
-
 # Install to packaged app
-install(FILES ${app_install_data_dir}/app.json TYPE DATA OPTIONAL)
-install(FILES ${app_install_data_dir}/${path_mapping_filename} TYPE DATA OPTIONAL)
 install(DIRECTORY ${bin_data_dir} TYPE DATA OPTIONAL)
 install(DIRECTORY ${bin_license_dir} TYPE DOC OPTIONAL)
 
