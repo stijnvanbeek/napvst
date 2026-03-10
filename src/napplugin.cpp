@@ -15,10 +15,15 @@
 #include <parameterdropdown.h>
 #include <parametergroup.h>
 #include <sdlhelpers.h>
+#include <utility/fileutils.h>
 
 #include <cmath>
 #include <cstdio>
 #include <functional>
+
+#include <dlfcn.h>
+
+constexpr const char* app_json = "app.json";
 
 using Steinberg::ModuleInitializer;
 using Steinberg::ModuleTerminator;
@@ -79,22 +84,34 @@ namespace Steinberg
 		bool NapPlugin::initializeNAP(nap::TaskQueue& mainThreadQueue, nap::utility::ErrorState& errorState)
 		{
 			mCore = std::make_unique<nap::Core>(mainThreadQueue);
+
+#ifdef __APPLE__
+			Dl_info info;
+			dladdr((void*)(app_json), &info);
+			std::string loaderPath = info.dli_fname;
+			std::string loaderDir = nap::utility::getFileDir(loaderPath);
+			std::string resourcedDir = nap::utility::joinPath({ loaderDir, "..", "Resources" });
+#else
+			std::runtime_error("Not implemented for Windows yet");
+#endif
+
 			if (!mCore->initializeEngineWithoutProjectInfo(errorState))
 				return false;
 			mCore->setupPlatformSpecificEnvironment();
+
 			mServices = mCore->initializeServices(errorState);
-			if (!mServices->initialized())
+			if (mServices == nullptr || !mServices->initialized())
+			{
+				nap::Logger::error(errorState.toString().c_str());
 				return false;
+			}
 
 			mAudioService = mCore->getService<nap::audio::AudioService>();
 			mAudioService->getNodeManager().setInputChannelCount(2);
 			mAudioService->getNodeManager().setOutputChannelCount(2);
 
-			// std::string app_structure_path = "/Users/stijn/Documents/GitHub/vsttest/data/objects.json";
-			// std::string data_dir = "/Users/stijn/Documents/GitHub/vsttest/data/";
-
-			std::string app_structure_path = "/Users/stijn/Documents/GitHub/nap/modules/napaudioadvanced/demo/fmsynth/data/fmsynth.json";
-			std::string data_dir = "/Users/stijn/Documents/GitHub/nap/modules/napaudioadvanced/demo/fmsynth/data/";
+			std::string data_dir = nap::utility::joinPath({ resourcedDir, "data" });;
+			std::string app_structure_path = nap::utility::joinPath({ data_dir, "objects.json" });
 
 			// std::string app_structure_path = xstr(APP_STRUCTURE_PATH);
 			// std::string data_dir = xstr(DATA_DIR);
@@ -104,7 +121,10 @@ namespace Steinberg
 				nap::utility::changeDir(data_dir);
 				app_structure_path = nap::utility::getFileName(app_structure_path);
 				if (!mCore->getResourceManager()->loadFile(app_structure_path, errorState))
+				{
+					nap::Logger::error("Failed to load app structure: %s", errorState.toString().c_str());
 					return false;
+				}
 				// mCore->getResourceManager()->watchDirectory(data_dir);
 			}
 			else {
@@ -112,6 +132,7 @@ namespace Steinberg
 				// std::vector<nap::rtti::FileLink> fileLinks;
 				// if (!mCore->getResourceManager()->loadJSON(app_structure, std::string(), fileLinks, errorState))
 				// 	return false;
+				nap::Logger::error("Failed to load app structure. file not found: %s", app_structure_path.c_str());
 				return false;
 			}
 

@@ -1,0 +1,14 @@
+{
+    "Type": "nap::ProjectInfo",
+    "mID": "ProjectInfo",
+    "Title": "VstTest",
+    "Version": "1.0.0",
+    "Data": "data/objects.json",
+    "PathMapping": "cache/path_mapping.json",
+    "ServiceConfig": "",
+    "RequiredModules": [
+        "napapp",
+        "napimgui",
+        "napcameracontrol"
+    ]
+}
