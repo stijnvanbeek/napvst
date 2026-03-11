@@ -40,11 +40,7 @@ if (TARGET nap${PROJECT_NAME})
     target_link_libraries(${PROJECT_NAME} nap${PROJECT_NAME})
 endif()
 
-if (BUILD_STATIC)
-    target_link_libraries(${PROJECT_NAME} PRIVATE sdk vstgui_support napimgui_static napparametergui_static napfmsynth_static napcontrol_static)
-else ()
-    target_link_libraries(${PROJECT_NAME} PRIVATE sdk vstgui_support napimgui napparametergui napfmsynth napcontrol)
-endif ()
+target_link_libraries(${PROJECT_NAME} PRIVATE sdk vstgui_support napimgui_static napparametergui_static napfmsynth_static napcontrol_static)
 
 smtg_target_configure_version_file(${PROJECT_NAME})
 
@@ -84,6 +80,10 @@ else()
         set(CMAKE_INSTALL_MODULEINFODIR ${APP_INSTALL_NAME}/lib)
     endif()
 endif()
+
+if (NOT DEFINED CODE_SIGNATURE)
+    set(CODE_SIGNATURE "-")
+endif ()
 
 # Install to packaged app
 install(DIRECTORY ${bin_data_dir} TYPE DATA OPTIONAL)
